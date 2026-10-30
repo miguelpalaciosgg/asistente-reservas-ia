@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Asistente de reservas con IA</title>
+<meta name="description" content="Boceto interactivo de un asistente de WhatsApp con IA para centros de buceo: responde con el catálogo real, recuerda a cada cliente, lleva a la reserva online y pasa a una persona cuando hace falta. Datos ficticios.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<!--
+  Boceto del asistente de reservas con IA (sin servidor, sin claves, datos inventados).
+  Las conversaciones están guionizadas en GUIONES: cada paso es un mensaje del cliente, del asistente
+  o de una persona, y las «herramientas» que el asistente consulta antes de contestar, que salen en el panel «Por dentro».
+  Así se ve cómo funcionaría el asistente de verdad: memoria por cliente, catálogo y huecos en vivo, enlace de reserva y paso a una persona.
+-->
+<style>
+:root {
+  --fondo: #f3f5f8; --tarjeta: #ffffff; --tinta: #14213a; --suave: #5d6880; --linea: #e2e7ef;
+  --acento: #0f8a6c; --acento-2: #12a37f; --acento-tenue: #e3f4ee;
+  --chat-fondo: #ece5dd; --burbuja-cli: #d9fdd3; --burbuja-bot: #ffffff; --chat-cab: #0f6b57;
+  --herr: #2f6fd1; --herr-tenue: #e7effc; --memo: #8a55c9; --memo-tenue: #f1e9fa; --humano: #d9822b; --humano-tenue: #fcefe1;
+  --ok: #1f9d55;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --fondo: #0d1420; --tarjeta: #151f2e; --tinta: #e6ebf3; --suave: #97a3b8; --linea: #263347;
+    --acento: #2bc29b; --acento-2: #3dd4ac; --acento-tenue: #12352d;
+    --chat-fondo: #0b141a; --burbuja-cli: #005c4b; --burbuja-bot: #1f2c34; --chat-cab: #1f2c34;
+    --herr: #6ea2f5; --herr-tenue: #1a2a44; --memo: #b98ae8; --memo-tenue: #2a1f3a; --humano: #f0a65c; --humano-tenue: #3a2a18;
+    --ok: #4cc27f;
+  }
+}
+:root[data-theme="dark"] {
+  --fondo: #0d1420; --tarjeta: #151f2e; --tinta: #e6ebf3; --suave: #97a3b8; --linea: #263347;
+  --acento: #2bc29b; --acento-2: #3dd4ac; --acento-tenue: #12352d;
+  --chat-fondo: #0b141a; --burbuja-cli: #005c4b; --burbuja-bot: #1f2c34; --chat-cab: #1f2c34;
+  --herr: #6ea2f5; --herr-tenue: #1a2a44; --memo: #b98ae8; --memo-tenue: #2a1f3a; --humano: #f0a65c; --humano-tenue: #3a2a18;
+  --ok: #4cc27f;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--fondo); color: var(--tinta); font: 16px/1.55 Inter, system-ui, -apple-system, sans-serif; }
+.envoltorio { max-width: 1120px; margin: 0 auto; padding: 32px 16px 56px; }
+header .etiqueta { display: inline-block; font-size: 13px; font-weight: 600; color: var(--acento); background: var(--acento-tenue); padding: 3px 10px; border-radius: 99px; }
+h1 { font-size: clamp(26px, 4vw, 38px); line-height: 1.15; margin: 12px 0 10px; letter-spacing: -.01em; }
+.entradilla { color: var(--suave); max-width: 720px; margin: 0 0 22px; }
+.escenarios { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px; }
+.escenarios button { font: inherit; font-size: 14px; font-weight: 500; border: 1px solid var(--linea); background: var(--tarjeta); color: var(--tinta); padding: 8px 14px; border-radius: 99px; cursor: pointer; }
+.escenarios button[aria-pressed="true"] { background: var(--acento); border-color: var(--acento); color: #fff; }
+.escenarios button:focus-visible, .controles button:focus-visible, .sugerencia:focus-visible { outline: 3px solid var(--acento-2); outline-offset: 2px; }
+
+.escena { display: grid; grid-template-columns: minmax(300px, 380px) 1fr; gap: 24px; align-items: start; }
+@media (max-width: 820px) { .escena { grid-template-columns: 1fr; } }
+
+/* Móvil con el chat */
+.movil { background: #111; border-radius: 34px; padding: 10px; box-shadow: 0 18px 40px rgba(10, 20, 40, .18); max-width: 380px; width: 100%; margin: 0 auto; }
+.pantalla { border-radius: 26px; overflow: hidden; background: var(--chat-fondo); display: flex; flex-direction: column; height: 620px; }
+@media (max-width: 420px) { .pantalla { height: 560px; } }
+.chat-cab { background: var(--chat-cab); color: #fff; display: flex; align-items: center; gap: 10px; padding: 14px 14px 12px; }
+.avatar { width: 36px; height: 36px; border-radius: 50%; background: #fff; color: var(--chat-cab); display: grid; place-items: center; font-weight: 700; font-size: 15px; flex: none; }
+.chat-cab b { display: block; font-size: 15px; line-height: 1.2; }
+.chat-cab small { opacity: .8; font-size: 12px; }
+.mensajes { flex: 1; overflow-y: auto; padding: 14px 10px; display: flex; flex-direction: column; gap: 6px; scroll-behavior: smooth; }
+.msg { max-width: 84%; padding: 7px 10px 5px; border-radius: 10px; font-size: 14.5px; line-height: 1.4; box-shadow: 0 1px .5px rgba(0,0,0,.13); white-space: pre-line; animation: entra .25s ease-out; color: var(--tinta); overflow-wrap: anywhere; }
+.msg .h { display: block; text-align: right; font-size: 11px; color: var(--suave); margin-top: 2px; }
+.msg.cli { align-self: flex-end; background: var(--burbuja-cli); border-top-right-radius: 3px; }
+.msg.bot { align-self: flex-start; background: var(--burbuja-bot); border-top-left-radius: 3px; }
+.msg.persona { align-self: flex-start; background: var(--burbuja-bot); border-left: 3px solid var(--humano); border-top-left-radius: 3px; }
+.msg.persona .quien { display: block; font-size: 12px; font-weight: 600; color: var(--humano); }
+.msg .enlace { display: block; margin-top: 6px; padding: 8px 10px; border-radius: 8px; background: var(--acento-tenue); color: var(--acento); font-weight: 600; font-size: 13.5px; }
+.aviso { align-self: center; font-size: 12px; background: var(--tarjeta); color: var(--suave); padding: 4px 10px; border-radius: 8px; text-align: center; animation: entra .25s ease-out; }
+.aviso.ok { color: var(--ok); font-weight: 600; }
+.escribiendo { align-self: flex-start; background: var(--burbuja-bot); border-radius: 10px; padding: 10px 12px; display: flex; gap: 4px; }
+.escribiendo i { width: 7px; height: 7px; border-radius: 50%; background: var(--suave); animation: bota 1s infinite; }
+.escribiendo i:nth-child(2) { animation-delay: .15s; } .escribiendo i:nth-child(3) { animation-delay: .3s; }
+.pie-chat { padding: 8px; display: flex; gap: 6px; min-height: 52px; align-items: center; }
+.sugerencia { flex: 1; font: inherit; font-size: 14px; text-align: left; border: 0; border-radius: 22px; padding: 10px 14px; background: var(--burbuja-bot); color: var(--tinta); cursor: pointer; }
+.sugerencia::before { content: "Toca para enviar · "; color: var(--suave); font-size: 12px; }
+.sugerencia:disabled { cursor: default; opacity: .6; }
+.sugerencia:disabled::before { content: ""; }
+@keyframes entra { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes bota { 0%, 60%, 100% { transform: none; opacity: .5; } 30% { transform: translateY(-4px); opacity: 1; } }
+
+/* Panel «Por dentro» */
+.panel { background: var(--tarjeta); border: 1px solid var(--linea); border-radius: 14px; padding: 18px; min-width: 0; }
+.panel h2 { font-size: 17px; margin: 0 0 2px; }
+.panel .sub { color: var(--suave); font-size: 14px; margin: 0 0 14px; }
+.contadores { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
+@media (max-width: 520px) { .contadores { grid-template-columns: repeat(2, 1fr); } }
+.contadores div { background: var(--fondo); border-radius: 10px; padding: 10px; }
+.contadores b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
+.contadores span { font-size: 12px; color: var(--suave); }
+.registro { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; max-height: 470px; overflow-y: auto; }
+.registro li { display: grid; grid-template-columns: 30px 1fr; gap: 10px; padding: 10px; border-radius: 10px; background: var(--fondo); animation: entra .25s ease-out; font-size: 14px; }
+.registro .ico { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; }
+.registro .ico svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.registro b { display: block; font-size: 13.5px; }
+.registro code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12.5px; color: var(--suave); overflow-wrap: anywhere; }
+.registro p { margin: 2px 0 0; color: var(--suave); }
+.t-memoria .ico { background: var(--memo-tenue); color: var(--memo); }
+.t-herramienta .ico { background: var(--herr-tenue); color: var(--herr); }
+.t-enlace .ico, .t-ok .ico { background: var(--acento-tenue); color: var(--acento); }
+.t-humano .ico { background: var(--humano-tenue); color: var(--humano); }
+.vacio { color: var(--suave); font-size: 14px; padding: 10px 0; }
+.controles { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.controles button { font: inherit; font-size: 14px; border: 1px solid var(--linea); background: var(--tarjeta); color: var(--tinta); padding: 7px 12px; border-radius: 8px; cursor: pointer; }
+.controles label { font-size: 14px; color: var(--suave); display: flex; align-items: center; gap: 6px; }
+
+/* Cómo está pensado */
+.como { margin-top: 40px; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+.como div { background: var(--tarjeta); border: 1px solid var(--linea); border-radius: 12px; padding: 16px; }
+.como h3 { font-size: 15px; margin: 0 0 6px; }
+.como p { margin: 0; color: var(--suave); font-size: 14px; }
+h2.secc { font-size: 22px; margin: 44px 0 4px; }
+.nota { color: var(--suave); font-size: 13px; margin-top: 28px; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+<div class="envoltorio">
+  <header>
+    <span class="etiqueta">Boceto interactivo · datos ficticios</span>
+    <h1>Asistente de reservas con IA para centros de buceo</h1>
+    <p class="entradilla">Contesta por WhatsApp o en la web con el catálogo y las plazas reales del centro, recuerda a cada cliente, le manda el enlace de reserva ya rellenado y pasa la conversación a una persona cuando hace falta. Elige una conversación y toca los mensajes del cliente para ver qué hace el asistente por dentro.</p>
+  </header>
+
+  <div class="escenarios" role="group" aria-label="Conversaciones de ejemplo" id="escenarios"></div>
+
+  <div class="escena">
+    <div class="movil">
+      <div class="pantalla">
+        <div class="chat-cab">
+          <div class="avatar" aria-hidden="true">CB</div>
+          <div><b>Centro de Buceo Demo</b><small id="estado">asistente · en línea</small></div>
+        </div>
+        <div class="mensajes" id="mensajes" aria-live="polite"></div>
+        <div class="pie-chat"><button class="sugerencia" id="sugerencia" type="button" disabled></button></div>
+      </div>
+    </div>
+
+    <section class="panel" aria-labelledby="t-panel">
+      <h2 id="t-panel">Por dentro</h2>
+      <p class="sub">Lo que consulta el asistente antes de contestar. Nunca se inventa un precio ni una plaza: los lee del sistema de reservas.</p>
+      <div class="contadores">
+        <div><b id="c-conv">0</b><span>conversaciones</span></div>
+        <div><b id="c-res">0</b><span>llevadas a reservar</span></div>
+        <div><b id="c-hum">0</b><span>pasadas a persona</span></div>
+        <div><b id="c-coste">0,0 c€</b><span>coste de IA</span></div>
+      </div>
+      <ol class="registro" id="registro"><li class="vacio" style="display:block;background:none;padding:0">Aún no ha pasado nada. Toca el primer mensaje del cliente.</li></ol>
+      <div class="controles">
+        <button type="button" id="b-repetir">Repetir conversación</button>
+        <label><input type="checkbox" id="auto" checked> Enviar solo los mensajes del cliente</label>
+      </div>
+    </section>
+  </div>
+
+  <h2 class="secc">Cómo está pensado</h2>
+  <div class="como">
+    <div><h3>Catálogo en vivo</h3><p>La IA usa herramientas (tool use) que leen las actividades, los precios y los huecos libres del sistema de reservas en el momento. Si cambia un precio, el asistente lo sabe.</p></div>
+    <div><h3>Memoria por cliente</h3><p>En WhatsApp el cliente se reconoce por su número; en la web, por una cookie. Guarda un resumen de cada conversación y lo que ya ha reservado, y se borra pasado un tiempo (RGPD).</p></div>
+    <div><h3>Lleva a la reserva</h3><p>No cobra en el chat: manda el enlace del widget con la actividad, el día, la hora y las personas ya puestas, y el cliente paga con tarjeta o Bizum como siempre.</p></div>
+    <div><h3>Pasa a una persona</h3><p>Preguntas médicas, quejas, grupos grandes o si el cliente lo pide: el asistente se calla, avisa al centro y la conversación sigue desde el panel con todo el contexto.</p></div>
+    <div><h3>Idiomas</h3><p>Contesta en el idioma en que le escriben, también los nombres de las actividades.</p></div>
+    <div><h3>Coste</h3><p>Con un modelo pequeño, unas décimas de céntimo por conversación. Contestar en WhatsApp a quien escribe primero no tiene coste de Meta dentro de las 24 h.</p></div>
+  </div>
+  <p class="nota">Boceto con conversaciones guionizadas para enseñar el diseño: aquí no hay IA real, servidor ni datos de nadie. El centro, los precios, los nombres y las direcciones son inventados.</p>
+</div>
+
+<script>
+(function () {
+  // Iconos (trazos de 24×24) para el registro «Por dentro»
+  var ICONOS = {
+    memoria: 'M12 3a6 6 0 0 0-6 6c0 2.2 1.2 3.6 2 4.5V17h8v-3.5c.8-.9 2-2.3 2-4.5a6 6 0 0 0-6-6zM9 21h6',
+    herramienta: 'M4 6h16M4 12h16M4 18h10',
+    enlace: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
+    humano: 'M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1',
+    ok: 'M5 12l4 4 10-10'
+  };
+
+  // Cada guion: pasos en orden. tipo: cli (cliente), bot, persona, aviso, y antes de contestar el bot, «usa» (herramientas que salen en el panel).
+  // coste: céntimos de euro aproximados de IA de ese turno (modelo pequeño).
+  var GUIONES = [
+    { id: 'bautizo', nombre: 'Bautizo · cliente nuevo', pasos: [
+      { tipo: 'cli', texto: 'Hola! Cuánto cuesta el bautizo de buceo? Somos 2' },
+      { tipo: 'bot', coste: .06, usa: [
+        { t: 'memoria', titulo: 'Memoria del cliente', det: 'Número nuevo: sin conversaciones ni reservas anteriores.' },
+        { t: 'herramienta', titulo: 'catalogo()', code: 'GET /p/centro-demo/w', det: 'Bautizo (BAU): 69 € por persona, 2 h 30, desde 10 años, sin experiencia.' }
+      ], texto: '¡Hola! El bautizo de buceo cuesta 69 € por persona, así que para 2 serían 138 €. Dura unas 2 h 30: explicación en tierra, práctica en poca profundidad y una inmersión de unos 35 minutos con un instructor. Incluye todo el equipo y las fotos.\n¿Qué día os viene bien?' },
+      { tipo: 'cli', texto: '¿Hay sitio este sábado?' },
+      { tipo: 'bot', coste: .07, usa: [
+        { t: 'herramienta', titulo: 'huecos("BAU", sábado)', code: 'GET /p/centro-demo/w/BAU?desde=sáb&hasta=sáb', det: '09:00 → 5 plazas · 11:30 → 2 plazas · 15:00 → completo' }
+      ], texto: 'Sí, el sábado quedan plazas:\n- 09:00 (5 libres)\n- 11:30 (2 libres)\nLa de las 15:00 está completa. ¿Cuál preferís?' },
+      { tipo: 'cli', texto: 'La de las 9' },
+      { tipo: 'bot', coste: .08, usa: [
+        { t: 'herramienta', titulo: 'presupuesto("BAU", 2 adultos)', code: 'POST /p/centro-demo/w/BAU/calcular', det: 'Total 138,00 €' },
+        { t: 'enlace', titulo: 'Enlace de reserva rellenado', code: '/w/centro-demo/BAU/es?fecha=sáb&hora=09:00&pax=2', det: 'Se marca el origen «Asistente» para medir cuántas reservas trae.' }
+      ], texto: 'Perfecto. Aquí tenéis el enlace con el sábado a las 09:00 para 2 personas ya puesto. Se paga con tarjeta o Bizum y os llega la confirmación al momento:', enlace: 'Reservar bautizo · sáb 09:00 · 2 pers. · 138 €' },
+      { tipo: 'aviso', clase: 'ok', texto: 'Reserva BAU-4821 pagada con Bizum', usa: [
+        { t: 'ok', titulo: 'Reserva confirmada', det: 'La memoria del cliente guarda: bautizo el sábado, 2 personas.' }
+      ], reserva: true },
+      { tipo: 'bot', coste: .03, texto: '¡Listo, ya estáis dentro! Traed bañador, toalla y chanclas, y llegad 15 minutos antes. Si os mareáis en barco, mejor una biodramina 30 minutos antes. ¡Nos vemos el sábado! 🤿' }
+    ] },
+    { id: 'vuelve', nombre: 'Cliente que vuelve', pasos: [
+      { tipo: 'cli', texto: 'Hola, soy Lucía otra vez. Qué puedo hacer ahora que ya tengo el Open Water?' },
+      { tipo: 'bot', coste: .07, usa: [
+        { t: 'memoria', titulo: 'Memoria del cliente', det: 'Lucía · Open Water certificado aquí en agosto · 4 inmersiones con el centro · prefiere salidas de mañana.' },
+        { t: 'herramienta', titulo: 'catalogo()', code: 'GET /p/centro-demo/w', det: 'Inmersiones dobles (DOB) 85 € · Advanced Open Water (AOW) 340 € · Nocturna (NOC) 60 €' }
+      ], texto: '¡Hola, Lucía! Qué bien volver a leerte. Con tu Open Water puedes:\n- Doble inmersión en barco a dos puntos de la isla: 85 €\n- Advanced Open Water (2 días, hasta 30 m): 340 €\n- Nocturna: 60 €\nComo la otra vez preferiste por la mañana, ¿te miro huecos de la doble a las 09:00?' },
+      { tipo: 'cli', texto: 'Sí, el domingo' },
+      { tipo: 'bot', coste: .07, usa: [
+        { t: 'herramienta', titulo: 'huecos("DOB", domingo)', code: 'GET /p/centro-demo/w/DOB?desde=dom&hasta=dom', det: '09:00 → 3 plazas' },
+        { t: 'enlace', titulo: 'Enlace de reserva rellenado', code: '/w/centro-demo/DOB/es?fecha=dom&hora=09:00&pax=1', det: 'Sus datos ya los tiene el centro: solo confirma y paga.' }
+      ], texto: 'El domingo a las 09:00 quedan 3 plazas. Te dejo la reserva preparada; como ya eres clienta, tus datos están puestos:', enlace: 'Reservar doble · dom 09:00 · 1 pers. · 85 €' },
+      { tipo: 'aviso', clase: 'ok', texto: 'Reserva DOB-1307 pagada con tarjeta', reserva: true, usa: [
+        { t: 'ok', titulo: 'Reserva confirmada', det: 'La memoria suma su quinta inmersión con el centro.' }
+      ] }
+    ] },
+    { id: 'ingles', nombre: 'En inglés', pasos: [
+      { tipo: 'cli', texto: 'Hi! Do you rent equipment? I have my own regulator but need the rest' },
+      { tipo: 'bot', coste: .06, usa: [
+        { t: 'memoria', titulo: 'Memoria del cliente', det: 'Número nuevo · idioma detectado: inglés.' },
+        { t: 'herramienta', titulo: 'material()', code: 'GET /p/centro-demo/w', det: 'Alquiler por pieza 8 € · tallas XS–XXL disponibles mañana' }
+      ], texto: 'Hi! Yes, we rent all the gear: wetsuit, BCD, fins, mask and computer, 8 € per item and per day. If you bring your own regulator you only pay for what you use.\nAre you certified? Then I can check tomorrow\'s boat dives for you.' },
+      { tipo: 'cli', texto: 'Advanced, yes. Tomorrow morning please' },
+      { tipo: 'bot', coste: .07, usa: [
+        { t: 'herramienta', titulo: 'huecos("DOB", mañana)', code: 'GET /p/centro-demo/w/DOB?desde=mañana', det: '09:00 → 6 plazas' },
+        { t: 'enlace', titulo: 'Booking link (EN)', code: '/w/centro-demo/DOB/en?fecha=mañana&hora=09:00&pax=1', det: 'El widget se abre en inglés.' }
+      ], texto: 'Tomorrow at 09:00 there are 6 places on the double boat dive (85 €). You can add the rental items and your sizes on the booking page:', enlace: 'Book double dive · tomorrow 09:00 · 85 €' }
+    ] },
+    { id: 'persona', nombre: 'Pasar a una persona', pasos: [
+      { tipo: 'cli', texto: 'Buenas, tengo asma desde pequeño pero controlada. ¿Puedo hacer el curso de Open Water?' },
+      { tipo: 'bot', coste: .05, usa: [
+        { t: 'memoria', titulo: 'Memoria del cliente', det: 'Número conocido: preguntó por el Open Water hace 2 semanas.' },
+        { t: 'humano', titulo: 'pasar_a_persona("pregunta médica")', det: 'Una pregunta de salud no la contesta la IA. El asistente deja de responder y la conversación entra en la bandeja «Mensajes» del panel con un aviso al centro.' }
+      ], texto: 'Gracias por contarlo. Esto lo tiene que valorar un instructor del centro con el cuestionario médico, así que te paso con el equipo. Te contestan por aquí mismo en un rato.', humano: true },
+      { tipo: 'aviso', texto: 'Conversación pasada al equipo del centro' },
+      { tipo: 'persona', quien: 'Marta · instructora', texto: 'Hola! Soy Marta. Con asma controlada muchas veces se puede, pero necesitamos el visto bueno de tu médico en el cuestionario. Te mando el formulario y lo vemos juntos, ¿vale?' },
+      { tipo: 'cli', texto: 'Genial, gracias Marta' }
+    ] }
+  ];
+
+  var $ = function (id) { return document.getElementById(id); };
+  var quieto = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var guion, paso, temporizador, ocupado = false;
+  var cont = { conv: 0, res: 0, hum: 0, coste: 0 };
+  var vistos = {};
+
+  function hora() { var d = new Date(); return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function bajar() { var m = $('mensajes'); m.scrollTop = m.scrollHeight; }
+  function espera(ms) { return new Promise(function (r) { temporizador = setTimeout(r, quieto ? 0 : ms); }); }
+
+  function pintarContadores() {
+    $('c-conv').textContent = cont.conv; $('c-res').textContent = cont.res; $('c-hum').textContent = cont.hum;
+    $('c-coste').textContent = cont.coste.toFixed(1).replace('.', ',') + ' c€';
+  }
+
+  function burbuja(p) {
+    var d = document.createElement('div');
+    if (p.tipo === 'aviso') { d.className = 'aviso' + (p.clase ? ' ' + p.clase : ''); d.textContent = p.texto; }
+    else {
+      d.className = 'msg ' + p.tipo;
+      d.innerHTML = (p.quien ? '<span class="quien">' + esc(p.quien) + '</span>' : '') + esc(p.texto) +
+        (p.enlace ? '<span class="enlace">🔗 ' + esc(p.enlace) + '</span>' : '') + '<span class="h">' + hora() + '</span>';
+    }
+    $('mensajes').appendChild(d); bajar();
+  }
+
+  function apunte(u) {
+    var r = $('registro'), v = r.querySelector('.vacio'); if (v) v.remove();
+    var li = document.createElement('li'); li.className = 't-' + u.t;
+    li.innerHTML = '<span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + ICONOS[u.t] + '"/></svg></span><div><b>' + esc(u.titulo) + '</b>' +
+      (u.code ? '<code>' + esc(u.code) + '</code>' : '') + '<p>' + esc(u.det) + '</p></div>';
+    r.appendChild(li); r.scrollTop = r.scrollHeight;
+  }
+
+  // Avanza hasta el siguiente mensaje del cliente (que se queda como sugerencia) o hasta el final
+  async function seguir() {
+    ocupado = true; var b = $('sugerencia'); b.disabled = true; b.textContent = '';
+    var mio = guion;
+    while (paso < guion.pasos.length) {
+      var p = guion.pasos[paso];
+      if (p.tipo === 'cli') {
+        b.textContent = p.texto; b.disabled = false; ocupado = false;
+        if ($('auto').checked) { await espera(2200); if (mio === guion && !ocupado && guion.pasos[paso] === p) enviar(); }
+        return;
+      }
+      if (p.usa) for (var i = 0; i < p.usa.length; i++) { await espera(650); if (mio !== guion) return; apunte(p.usa[i]); }
+      if (p.tipo === 'bot' || p.tipo === 'persona') {
+        $('estado').textContent = p.tipo === 'persona' ? 'equipo del centro · escribiendo…' : 'asistente · escribiendo…';
+        var e = document.createElement('div'); e.className = 'escribiendo'; e.innerHTML = '<i></i><i></i><i></i>';
+        $('mensajes').appendChild(e); bajar();
+        await espera(p.tipo === 'persona' ? 1800 : 1100); e.remove(); if (mio !== guion) return;
+        $('estado').textContent = cont.humGuion ? 'equipo del centro · en línea' : 'asistente · en línea';
+      } else { await espera(400); if (mio !== guion) return; }
+      burbuja(p);
+      if (p.coste) cont.coste += p.coste;
+      if (p.reserva) cont.res++;
+      if (p.humano) { cont.hum++; cont.humGuion = true; }
+      pintarContadores(); paso++;
+    }
+    b.textContent = 'Fin de la conversación. Prueba otra arriba.'; ocupado = false;
+  }
+
+  function enviar() {
+    if (ocupado) return; var p = guion.pasos[paso]; if (!p || p.tipo !== 'cli') return;
+    clearTimeout(temporizador);
+    if (!vistos[guion.id]) { vistos[guion.id] = true; cont.conv++; pintarContadores(); }
+    burbuja(p); paso++; seguir();
+  }
+
+  function empezar(id) {
+    clearTimeout(temporizador);
+    guion = GUIONES.filter(function (g) { return g.id === id; })[0]; paso = 0; cont.humGuion = false;
+    $('mensajes').innerHTML = ''; $('estado').textContent = 'asistente · en línea';
+    $('registro').innerHTML = '<li class="vacio" style="display:block;background:none;padding:0">Toca el mensaje del cliente para empezar.</li>';
+    Array.prototype.forEach.call($('escenarios').children, function (b) { b.setAttribute('aria-pressed', b.dataset.id === id); });
+    var a = document.createElement('div'); a.className = 'aviso';
+    a.textContent = 'Los mensajes los contesta un asistente con IA. Escribe «persona» para hablar con el equipo.';
+    $('mensajes').appendChild(a);
+    ocupado = false; seguir();
+  }
+
+  GUIONES.forEach(function (g) {
+    var b = document.createElement('button'); b.type = 'button'; b.dataset.id = g.id; b.textContent = g.nombre;
+    b.addEventListener('click', function () { empezar(g.id); });
+    $('escenarios').appendChild(b);
+  });
+  $('sugerencia').addEventListener('click', enviar);
+  $('b-repetir').addEventListener('click', function () { empezar(guion.id); });
+  $('auto').addEventListener('change', function () { if ($('auto').checked && !ocupado) { var p = guion.pasos[paso]; if (p && p.tipo === 'cli') { clearTimeout(temporizador); temporizador = setTimeout(enviar, quieto ? 0 : 1200); } } });
+  empezar('bautizo');
+})();
+</script>
+</body>
+</html>
