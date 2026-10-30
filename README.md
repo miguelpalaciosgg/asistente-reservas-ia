@@ -25,4 +25,4 @@ Cuatro conversaciones guionizadas en un móvil y, al lado, el panel **«Por dent
 La primera versión (2025) era un chatbot web en Node.js con Gemini y Firestore, con memoria de conversación por cliente y la información del centro en un JSON. Este boceto es el rediseño: catálogo en vivo en lugar de datos copiados a mano, WhatsApp, paso a persona y medición de reservas.
 
 ---
-Hecho por Nix Universal. Centro, precios, nombres y enlaces de la demo son ficticios.
+Centro, precios, nombres y enlaces de la demo son ficticios.
